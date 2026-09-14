@@ -1,0 +1,45 @@
+= Whole-register vector transfer restart semantics
+
+This note records the restart behavior for the whole-register vector load and
+store instructions described in <<norm:vector_ls_seg_wholereg_evl>>.
+It addresses the ambiguity tracked in https://github.com/riscv/riscv-isa-manual/issues/3316.
+
+== Effective range
+
+For these instructions, the effective vector length is:
+
+[source,text]
+----
+evl = NFIELDS * VLEN / EEW
+----
+
+The operation is reserved when `csr:vstart[] >= evl`. Otherwise, the
+transferred element indices are the half-open range `[csr:vstart[], evl)`.
+Elements with an index lower than `csr:vstart[]` are not transferred and
+remain undisturbed in the destination or memory state, as applicable.
+
+This rule is independent of the current `csr:vtype[]` and `csr:vl[]` values.
+It gives an implementation a deterministic restart point after a trap or
+interrupt without requiring already completed elements to be repeated.
+
+== Implementation checklist
+
+* Compute `evl` from the encoded field count and the implementation's VLEN/EEW.
+* Check the reserved condition before beginning the transfer.
+* Begin at `csr:vstart[]` and process every element through `evl - 1`.
+* Preserve all elements below `csr:vstart[]`.
+* Apply the instruction's normal memory ordering and fault behavior to the
+  transferred range.
+
+== Acceptance examples
+
+Assuming `NFIELDS=2`, `VLEN=128`, and `EEW=32`, `evl=8`.
+
+* `csr:vstart[]=0`: transfer elements 0 through 7.
+* `csr:vstart[]=3`: leave elements 0 through 2 undisturbed and transfer
+  elements 3 through 7.
+* `csr:vstart[]=8`: the instruction encoding is reserved.
+
+This is an explanatory companion to the normative text; it does not introduce
+new architectural behavior. Implementations should continue to follow the
+normative vector specification and its conformance tests.
